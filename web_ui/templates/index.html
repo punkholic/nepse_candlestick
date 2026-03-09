@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NEPSE Candles</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-title">NEPSE Candles</div>
+          <div class="brand-sub">Candlestick view powered by your <code>nepse_api.py</code></div>
+        </div>
+        <div class="actions">
+          <button id="btnSnapshot" class="btn btn-secondary">Fetch all endpoints (snapshot)</button>
+          <a id="btnDownloadSnapshot" class="btn btn-secondary" href="/api/snapshot?download=true" target="_blank" rel="noreferrer">Download snapshot JSON</a>
+        </div>
+      </header>
+
+      <main class="main">
+        <aside class="panel">
+          <div class="panel-section">
+            <div class="panel-title">Candle chart</div>
+            <label class="field">
+              <div class="field-label">Company / Symbol</div>
+              <input id="symbolInput" class="input" list="symbols" placeholder="Type symbol, e.g. PPL" />
+              <datalist id="symbols"></datalist>
+              <div class="hint">Tip: pick from list, then we auto-fill Security ID.</div>
+            </label>
+
+            <label class="field">
+              <div class="field-label">Security ID</div>
+              <input id="securityIdInput" class="input" inputmode="numeric" placeholder="e.g. 8122" />
+            </label>
+
+            <label class="field inline">
+              <input id="verifySslInput" type="checkbox" />
+              <span>Verify SSL</span>
+            </label>
+
+            <button id="btnLoadCandles" class="btn btn-primary">Load candles</button>
+
+            <div id="status" class="status"></div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-title">Snapshot status</div>
+            <pre id="snapshotBox" class="codebox">(not loaded)</pre>
+          </div>
+        </aside>
+
+        <section class="chart-area">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title" id="chartTitle">Candlestick chart</div>
+              <div class="chart-sub" id="chartSub">Load a security to view OHLC + volume</div>
+            </div>
+            <div class="pill" id="chartMeta"></div>
+          </div>
+          <div id="chart" class="chart"></div>
+          <div id="chart2" class="chart chart-volume"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
