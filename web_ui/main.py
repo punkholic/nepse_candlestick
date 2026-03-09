@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from nepse_core.nepse_api import NepseAPI
 from web_ui.snapshot import fetch_all
+from web_ui.predict import fetch_price_history, list_algorithms, predict_next_candle
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,4 +179,29 @@ def list_snapshots(limit: int = Query(50, ge=1, le=500)) -> Dict[str, Any]:
         "count": len(files),
         "files": [{"name": f.name, "path": str(f), "bytes": f.stat().st_size} for f in files],
     }
+
+
+@app.get("/api/predict")
+def predict(
+    security_id: int = Query(..., description="NEPSE security id."),
+    algo: str = Query("rf", description="Algorithm id. See /api/algos."),
+    max_pages: int = Query(10, ge=1, le=60, description="How many pages of history to fetch for training."),
+    page_size: int = Query(200, ge=10, le=500, description="NEPSE page size for history fetch."),
+    verify_ssl: bool = Query(False),
+) -> Dict[str, Any]:
+    api = NepseAPI(verify_ssl=verify_ssl)
+    rows = fetch_price_history(api, security_id, max_pages=max_pages, page_size=page_size)
+    out = predict_next_candle(rows, algo=algo)
+    out["security_id"] = security_id
+    out["history_range"] = {
+        "min_time": rows[0].t if rows else None,
+        "max_time": rows[-1].t if rows else None,
+        "rows": len(rows),
+    }
+    return out
+
+
+@app.get("/api/algos")
+def algos() -> Dict[str, Any]:
+    return {"ok": True, "data": list_algorithms()}
 

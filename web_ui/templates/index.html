@@ -41,7 +41,14 @@
               <span>Verify SSL</span>
             </label>
 
+            <label class="field">
+              <div class="field-label">Prediction algorithm</div>
+              <select id="algoSelect" class="input"></select>
+              <div class="hint">Compare models; none is “best” without backtesting.</div>
+            </label>
+
             <button id="btnLoadCandles" class="btn btn-primary">Load candles</button>
+            <button id="btnPredict" class="btn btn-secondary">Predict next candle</button>
 
             <div id="status" class="status"></div>
           </div>

@@ -23,6 +23,8 @@ async function fetchJSON(url) {
 }
 
 let chart, candleSeries, volChart, volSeries;
+let predSeries = null;
+let predLine = null;
 let currentSecurityId = null;
 let currentPage = 0;
 let hasMore = true;
@@ -63,6 +65,18 @@ function initCharts() {
     throw new Error("Unsupported LightweightCharts version: cannot create histogram series");
   };
 
+  const addLine = (chartApi, options) => {
+    // v4 API
+    if (typeof chartApi.addLineSeries === "function") {
+      return chartApi.addLineSeries(options);
+    }
+    // v5+ API
+    if (typeof chartApi.addSeries === "function" && window.LightweightCharts.LineSeries) {
+      return chartApi.addSeries(window.LightweightCharts.LineSeries, options);
+    }
+    throw new Error("Unsupported LightweightCharts version: cannot create line series");
+  };
+
   const common = {
     layout: {
       background: { color: "transparent" },
@@ -97,6 +111,21 @@ function initCharts() {
     borderDownColor: "#fb7185",
     wickUpColor: "#34d399",
     wickDownColor: "#fb7185",
+  });
+
+  // Prediction overlay (separate series so it doesn't change historical candles).
+  predSeries = addCandles(chart, {
+    upColor: "rgba(251,191,36,0.9)",
+    downColor: "rgba(245,158,11,0.9)",
+    borderUpColor: "rgba(251,191,36,0.9)",
+    borderDownColor: "rgba(245,158,11,0.9)",
+    wickUpColor: "rgba(251,191,36,0.9)",
+    wickDownColor: "rgba(245,158,11,0.9)",
+  });
+  predLine = addLine(chart, {
+    color: "rgba(251,191,36,0.9)",
+    lineWidth: 2,
+    lineStyle: 2, // dashed-ish in v4; harmless in v5
   });
 
   volChart = LightweightCharts.createChart(volEl, {
@@ -159,6 +188,26 @@ async function loadCompanies() {
   }
 }
 
+async function loadAlgos() {
+  try {
+    const res = await fetchJSON("/api/algos");
+    const list = (res && res.data) || [];
+    const sel = $("algoSelect");
+    sel.innerHTML = "";
+    for (const a of list) {
+      const opt = document.createElement("option");
+      opt.value = a.id;
+      opt.textContent = a.label || a.id;
+      opt.title = a.description || "";
+      sel.appendChild(opt);
+    }
+    // default
+    sel.value = "rf";
+  } catch (e) {
+    setStatus(`Failed to load algorithms: ${e}`, "bad");
+  }
+}
+
 function findSecurityIdForSymbol(symbol) {
   const dl = $("symbols");
   const opts = dl.querySelectorAll("option");
@@ -209,6 +258,8 @@ async function loadCandles() {
     const allVol = Array.from(volumeStore.values()).sort((a, b) => a.time - b.time);
     candleSeries.setData(allCandles);
     volSeries.setData(allVol);
+    if (predSeries) predSeries.setData([]);
+    if (predLine) predLine.setData([]);
 
     const meta = data.meta || {};
     const totalPages = typeof meta.total_pages === "number" ? meta.total_pages : null;
@@ -274,6 +325,40 @@ async function maybeLoadMore() {
   }
 }
 
+async function predictNext() {
+  if (!currentSecurityId) {
+    setStatus("Load candles first (or set Security ID), then predict.", "bad");
+    return;
+  }
+  const verify = $("verifySslInput").checked ? "true" : "false";
+  const algo = ($("algoSelect").value || "rf").trim();
+  try {
+    setStatus(`Predicting next candle… (algo=${algo})`);
+    const data = await fetchJSON(
+      `/api/predict?security_id=${encodeURIComponent(currentSecurityId)}&algo=${encodeURIComponent(algo)}&max_pages=10&page_size=200&verify_ssl=${verify}`
+    );
+    if (!data.ok) throw new Error(data.error || "Prediction failed");
+    const p = data.prediction;
+    if (!p || !predSeries || !predLine) throw new Error("Prediction series not initialized");
+
+    predSeries.setData([{ time: p.time, open: p.open, high: p.high, low: p.low, close: p.close }]);
+    predLine.setData([
+      { time: data.last.time, value: data.last.close },
+      { time: p.time, value: p.close },
+    ]);
+
+    const retPct = (p.pred_close_return * 100).toFixed(2);
+    const upPct = (p.prob_up * 100).toFixed(1);
+    $("chartMeta").textContent = `${$("chartMeta").textContent} • ${algo} • pred ${retPct}% • P(up) ${upPct}%`;
+    setStatus(
+      `Predicted next close: ${p.close.toFixed(2)} (${retPct}%), P(up)=${upPct}% | algo=${algo} | dirAcc=${(data.meta.test_dir_acc ?? 0).toFixed(3)}`,
+      "good"
+    );
+  } catch (e) {
+    setStatus(`Prediction error: ${e}`, "bad");
+  }
+}
+
 async function loadSnapshot() {
   const verify = $("verifySslInput").checked ? "true" : "false";
   try {
@@ -298,6 +383,7 @@ async function loadSnapshot() {
 function wire() {
   $("btnLoadCandles").addEventListener("click", loadCandles);
   $("btnSnapshot").addEventListener("click", loadSnapshot);
+  $("btnPredict").addEventListener("click", predictNext);
 
   $("symbolInput").addEventListener("change", () => {
     const sym = ($("symbolInput").value || "").trim();
@@ -315,6 +401,7 @@ try {
   initCharts();
   wire();
   loadCompanies();
+  loadAlgos();
 
   // Default view so the chart isn't empty on first load.
   $("securityIdInput").value = "8122";
